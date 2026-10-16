@@ -1,6 +1,24 @@
+# C++ desktop build
 build/
 .cmake/
 CMakeCache.txt
 CMakeFiles/
 *.o
 mathcity
+
+# Gradle / Android Studio
+.gradle/
+app/build/
+android/app/build/
+
+# Local SDK path (each machine sets its own)
+local.properties
+android/local.properties
+
+# IDE
+*.iml
+.idea/
+*.hprof
+
+# OS
+.DS_Store
