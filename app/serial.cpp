@@ -1,1 +1,1 @@
-// TODO: no code yet - scaffold only
+// stub - see serial.h (decoupled, header-only)

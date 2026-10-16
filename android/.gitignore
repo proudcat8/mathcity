@@ -1,0 +1,18 @@
+# Gradle / Android Studio
+.gradle/
+build/
+app/build/
+
+# Local SDK path (each machine sets its own)
+local.properties
+
+# IDE
+*.iml
+.idea/
+*.hprof
+
+# OS
+.DS_Store
+
+# Keep the shared debug APK
+!MATHCITY.apk
