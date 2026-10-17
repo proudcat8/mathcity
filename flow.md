@@ -1,68 +1,62 @@
 # Flow - MATHCITY
 
-Binary: `./mathcity` (from `app/main.cpp`). Firmware: Arduino slave, only displays.
+Android app: `MATHCITY.apk`. Four tabs: Map, Waste, Water, Test.
+Physical model runs standalone on Arduino; no live link required.
 
 ## Startup
 
 ```
-main() -> graph_load() [core/graph.cpp] -> serial_open("/dev/ttyUSB0") [app/serial.cpp] -> UI loop [app/main.cpp]
+App opens on Map tab -> draws city canvas with 12 nodes + 14 roads
+-> shows current best route R1 -> H in green
+-> user interacts via tabs and taps
 ```
 
-No graph = no run. All coords/edges come from `core/graph.h`.
+## Tab -> Code Map
 
-## Menu -> Code Map
+1. Map tab - `android/app/.../MainActivity.kt:MapScreen()`
+   - Tap a road -> block/unblock it (red) OR cycle traffic Low/Med/High (amber)
+   - Chips switch origin R1/R2/R3 or Fire emergency F->H
+   - Dijkstra recalculates instantly; green line moves to new best route
+   - Selected road panel shows `cost = distance x traffic`
 
-Raylib window + terminal keys. Each option calls one module:
+2. Waste tab - `WasteScreen()`
+   - Four collection points = 24 orders via permutation
+   - Shows top 3 shortest routes starting/ending at water tank W
 
-1. Option 1 - Show base map
-   -> `graph_load()` -> draw nodes/edges
-   -> files: `core/graph.cpp` + `app/main.cpp`
+3. Water tab - `WaterScreen()`
+   - Sliders for total water and H:S:R ratio weights
+   - Minimums enforced: hospital >= 400 L, school >= 150 L
+   - Shows litres and % per area with progress bars
 
-2. Option 2 - Normal route A->B (e.g. R1->H)
-   -> `dijkstra(start, end)` with `traffic=1`, `blocked={}`
-   -> files: `core/dijkstra.cpp` + `core/cost.cpp` (`cost = dist * traffic`)
+4. Test tab - `TestScreen()`
+   - Hospital placement: compares total residential distance for 3 candidate spots
+   - Road failure test: knocks out 1 random road x 100, reruns Dijkstra R1->H,
+     reports % connected and average detour
 
-3. Option 3 - Set traffic (1=Low, 2=Med, 3=High)
-   -> `cost_update(edge, traffic)` -> `dijkstra()` again
-   -> short+congested loses to long+free
-   -> files: `core/cost.cpp` -> `core/dijkstra.cpp`
-
-4. Option 4 - Block road (e.g. E2)
-   -> `blocked_add(E2)` -> `dijkstra()` skipping E2
-   -> send `B E2\n` via `serial_send()`
-   -> files: `core/dijkstra.cpp` -> `app/serial.cpp` -> `firmware/src/main.cpp` (RED LED)
-
-5. Option 5 - Emergency F->H
-   -> `dijkstra(F, H)` + `serial_send("E 1")` -> buzzer + GREEN route flash
-   -> if blocked, auto-recalc alternate
-   -> files: `core/dijkstra.cpp` -> `app/serial.cpp`
-
-6. Option 6 - Waste collection (P1-P4)
-   -> `waste_best()` : 24 perms via `next_permutation`, sum dist matrix, return top 3
-   -> files: `core/services.cpp`
-
-7. Option 7 - Water distribution (H:S:R)
-   -> `water_alloc(total, ratio 5:2:3, mins H>=400)` -> liters + % + deficit
-   -> files: `core/services.cpp`
-
-8. Option 8 - Resilience test (probability)
-   -> `resilience(100)` : random 1-edge fail x100, run Dijkstra, report success% + avg extra cost
-   -> files: `core/services.cpp` -> `core/dijkstra.cpp`
-
-9. Option 0 - Quit
-   -> `serial_close()` -> `CloseWindow()`
-
-## Data Flow (per recalc)
+## Data Flow (per recalc on Map tab)
 
 ```
-UI input (block/traffic) -> cost.cpp builds weights -> dijkstra.cpp returns path+total
--> main.cpp draws path -> serial.cpp sends "R N1,N2,H" -> firmware parses protocol.h -> LEDs update
+Tap road -> blocked/traffic state updates
+-> dijkstra(start, end, traffic, blocked) returns path + total cost
+-> Compose canvas repaints: green = best route, red = blocked, amber = congested
+-> status banner shows route nodes and cost
 ```
 
 ## Judge Demo Script
 
 ```
-Judge: "Block N3-N5" -> Opt 4 -> new path computed -> model shows RED old, GREEN new
-Judge: "Heavy traffic E1" -> Opt 3 (E1=3) -> Opt 2 rerun -> longer road wins
-Judge: "Fire!" -> Opt 5 -> fastest F->H + buzzer
+Judge: "Block this road" -> tap road on Map tab -> it turns red -> new green route appears
+Judge: "Heavy traffic here" -> tap road while in Traffic mode -> amber -> longer clear road wins
+Judge: "Fire emergency!" -> tap Fire chip -> route switches to F -> H in red emergency colour
+Judge: "What about waste?" -> switch to Waste tab -> shows best of 24 orders
+Judge: "Water shortage?" -> switch to Water tab -> sliders split litres by ratio
+Judge: "Is the city reliable?" -> switch to Test tab -> Run 100 trials -> % connected
 ```
+
+## Files used per feature
+
+- Map: `MainActivity.kt` (`MapScreen`), `City.kt` (`dijkstra`)
+- Waste: `MainActivity.kt` (`WasteScreen`), `City.kt` (`wasteBest`)
+- Water: `MainActivity.kt` (`WaterScreen`), `City.kt` (`waterAlloc`)
+- Test: `MainActivity.kt` (`TestScreen`), `City.kt` (`resilience`)
+- Theme: `Theme.kt`

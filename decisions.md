@@ -2,65 +2,53 @@
 
 Tech scope only: code + electronics + app. No cardboard/poster.
 Workdir: `/home/proudcat/Downloads/mathcity/`
-OS: Arch Linux. Toolchain: `base-devel cmake cargo? no - g++, platformio`.
+OS: Arch Linux. Toolchain: JDK 17, Gradle, Android SDK platform-34, Compose.
 
-## D1: Python -> C++17 (core + app)
+## D1: C++ desktop -> Kotlin + Jetpack Compose Android app
 
-Why: no runtime, single binary, deterministic Dijkstra, direct `/dev/ttyUSB0` access, shares structs with Arduino firmware. Python + Streamlit needs browser/server/pip, fragile for live judge demo.
+Why: the judge uses a phone. Kotlin + Compose builds a native APK, works offline, has real buttons/sliders, no browser or server. C++ Raylib desktop was kept only as a fallback demo on a laptop; it is not the app language.
 
-Before (Python - rejected):
-```python
-import heapq
-def dijkstra(graph, start):
-    dist = {start: 0}
-    pq = [(0, start)]
-```
-
-After (C++17 - chosen):
-```cpp
-// core/dijkstra.h
-#pragma once
-#include <vector>
-std::vector<int> dijkstra(int start, int end);
-```
-
-## D2: Streamlit/Web UI -> Raylib Desktop UI (C++)
-
-Why: offline, no browser, 60fps 2D map, click edge to block. One `./mathcity` binary.
-
-Before (rejected):
-```python
-import streamlit as st
-st.slider("traffic", 1, 3)
-```
-
-After (chosen):
+Before (rejected - desktop):
 ```cpp
 // app/main.cpp
-// TODO: InitWindow(800, 600, "MATHCITY");
-// TODO: if (IsMouseButtonPressed(0)) ToggleBlock(edge);
+InitWindow(800, 600, "MATHCITY");
 ```
 
-## D3: pyserial -> raw termios serial (C++)
+After (chosen - Android):
+```kotlin
+// android/app/.../MainActivity.kt
+setContent { MathcityTheme { AppScreen() } }
+```
 
-Why: zero dep, works on Arch with `g++` only, same language as rest.
+## D2: App and physical model run separately
+
+Why: no fragile USB serial link on demo day. The Android app computes and shows routes on screen. The Arduino firmware runs standalone preprogrammed LED patterns on the model. Same graph logic in both; no runtime connection required.
+
+Before (rejected - linked):
+```cpp
+serial_send("B E2\n"); // app talks to Arduino live
+```
+
+After (chosen - decoupled):
+```kotlin
+blocked = blocked + edgeId // app only, drawn on Compose canvas
+```
+
+## D3: Hand-rolled Dijkstra instead of graph library
+
+Why: the project must show the math (graphs, distance x traffic, blocked edges). A library hides the algorithm.
 
 Before (rejected):
-```python
-import serial
-ser = serial.Serial('/dev/ttyUSB0', 115200)
-ser.write(b'ROUTE:N1,N2\n')
+```kotlin
+// library hides everything
+graph.shortestPath(start, end)
 ```
 
 After (chosen):
-```cpp
-// app/serial.h
-#pragma once
-int serial_open(const char* dev); // TODO: termios 115200
-void serial_send(int fd, const char* line);
+```kotlin
+// android/app/.../city/City.kt
+fun dijkstra(start: Int, end: Int, ...): RouteResult { ... }
 ```
-
-Protocol (locked): `R N1,N2,H\n`, `T E2=3\n`, `B E2\n`, `E 1\n`
 
 ## D4: Arduino IDE -> PlatformIO + FastLED + WS2812B
 
@@ -74,36 +62,16 @@ digitalWrite(13, HIGH); // one pin per road, runs out
 After (chosen):
 ```cpp
 // firmware/src/main.cpp
-// TODO: FastLED.show(); // GREEN=route, YELLOW=congest, RED=blocked
+FastLED.show(); // GREEN=route, YELLOW=congested, RED=blocked
 ```
 
-## D5: networkx -> hand-rolled Dijkstra + adjacency list
-
-Why: project must SHOW math (graphs, distance x traffic, `a*D+b*T+c*C`). Library hides it.
-
-Before (rejected):
-```python
-import networkx as nx
-nx.shortest_path(G, "F", "H")
-```
-
-After (chosen):
-```cpp
-// core/dijkstra.cpp
-// TODO: adjacency list + binary-heap, skip blocked, respect one_way
-```
-
-## D6: Layout of repo
+## D5: Layout of repo
 
 ```
-core/graph.h/.cpp       // NODES(x,y), EDGES(u,v,dist,time,one_way)
-core/cost.h/.cpp        // dist*traffic, a*D+b*T+c*C
-core/dijkstra.h/.cpp    // routing
-core/services.h/.cpp    // waste perm, water ratio, resilience
-app/main.cpp            // Raylib UI + menu
-app/serial.h/.cpp       // termios link
-firmware/src/main.cpp   // LED display slave
-firmware/include/protocol.h // shared protocol strings
-firmware/platformio.ini // env: nanoatmega328
-CMakeLists.txt          // root build
+MATHCITY.apk            # installable app
+android/                # Kotlin + Compose app source
+firmware/               # Arduino standalone LED demo (optional)
+decisions.md            # tech decisions + before/after snippets
+flow.md                 # app flow + judge demo script
+README.md               # features + install + languages
 ```
